@@ -6574,6 +6574,17 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 		panel_ext->funcs->hbm_get_state(dsi->panel, (bool *)params);
 		break;
 	}
+	case DSI_HBM_GET_REQUESTED_STATE:
+	{
+		panel_ext = mtk_dsi_get_panel_ext(comp);
+		if (!(panel_ext && panel_ext->funcs &&
+		      panel_ext->funcs->hbm_get_requested_state))
+			break;
+
+		panel_ext->funcs->hbm_get_requested_state(dsi->panel,
+							  (bool *)params);
+		break;
+	}
 	case DSI_HBM_GET_WAIT_STATE:
 	{
 		panel_ext = mtk_dsi_get_panel_ext(comp);
@@ -6780,6 +6791,68 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 
 	return 0;
 }
+
+// Sysfs
+// HBM
+static ssize_t hbm_show(struct device *dev, struct device_attribute *attr,
+			char *buf)
+{
+	struct mtk_dsi *dsi = dev_get_drvdata(dev);
+	struct mtk_panel_ext *ext = dsi->ext;
+	bool hbm = false;
+
+	if (ext && ext->funcs && ext->funcs->hbm_get_state)
+		ext->funcs->hbm_get_state(dsi->panel, &hbm);
+	else
+		DDPPR_ERR("%s: hbm_get_state is NULL\n", __func__);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", hbm);
+}
+
+static ssize_t hbm_store(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	struct mtk_dsi *dsi = dev_get_drvdata(dev);
+	struct drm_crtc *crtc = dsi->encoder.crtc;
+	bool hbm = false;
+	int ret = 0;
+
+	ret = kstrtobool(buf, &hbm);
+	if (ret)
+		return ret;
+
+	ret = mtk_drm_crtc_set_panel_hbm(crtc, hbm);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(hbm);
+
+// Initialization
+static struct attribute *mtk_dsi_attrs[] = {
+	&dev_attr_hbm.attr,
+	NULL,
+};
+
+static const struct attribute_group mtk_dsi_attr_group = {
+	.attrs = mtk_dsi_attrs,
+};
+
+static int mtk_dsi_sysfs_init(struct mtk_dsi *dsi)
+{
+	int ret = 0;
+
+	ret = sysfs_create_group(&dsi->dev->kobj, &mtk_dsi_attr_group);
+	if (ret) {
+		DDPPR_ERR("%s: failed to create sysfs group\n", __func__);
+		return ret;
+	}
+
+	return 0;
+}
+// End Sysfs
 
 static const struct mtk_ddp_comp_funcs mtk_dsi_funcs = {
 	.prepare = mtk_dsi_ddp_prepare,
@@ -7090,6 +7163,12 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 #endif
 	platform_set_drvdata(pdev, dsi);
 	DDPINFO("%s-\n", __func__);
+
+	// Initialize our sysfs
+	ret = mtk_dsi_sysfs_init(dsi);
+	if (ret) {
+		dev_err(dev, "Failed to initialize sysfs: %d\n", ret);
+	}
 
 	return component_add(&pdev->dev, &mtk_dsi_component_ops);
 error:

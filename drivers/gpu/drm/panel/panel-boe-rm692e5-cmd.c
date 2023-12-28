@@ -444,7 +444,7 @@ struct lcm {
 
 	bool hbm_en;
 	bool hbm_wait;
-	bool hbm_stat;           //0Î´ÔÚHBM  1ÔÚHBM
+	bool hbm_stat;
 
 	int error;
 };
@@ -1056,6 +1056,7 @@ static int lcm_unprepare(struct drm_panel *panel)
 	//prize add by wangfei for ldo 1.8 20210709 end
 
 #endif
+	ctx->hbm_en = false;
 	/*przie update hbm_stat X9LAVA-953 20230329*/
 	ctx->hbm_stat = false;
 	return 0;
@@ -1268,6 +1269,10 @@ static int lcm_setbacklight_cmdq(void *dsi, dcs_write_gce cb,
 	unsigned int level_normal = 125;
 	unsigned int reg_level = 125;
 
+	if (g_ctx->hbm_stat) {
+		return 0; // Do not set backlight when HBM is on
+	}
+
 	if(level > 0){
 		reg_level = Gamma_to_level[level] + BLK_LEVEL_OFFSET;
 		bl_level = level;
@@ -1306,9 +1311,6 @@ static int panel_hbm_set_cmdq(struct drm_panel *panel, void *dsi,
 	if (!cb)
 		return -1;
 
-	if (ctx->hbm_en == en)
-		goto done;
-
 	if (en)
 	{
 		printk("[panel] %s : set HBM\n",__func__);
@@ -1337,6 +1339,13 @@ static void panel_hbm_get_state(struct drm_panel *panel, bool *state)
 	struct lcm *ctx = panel_to_lcm(panel);
 
 	*state = ctx->hbm_en;
+}
+
+static void panel_hbm_get_requested_state(struct drm_panel *panel, bool *state)
+{
+	struct lcm *ctx = panel_to_lcm(panel);
+
+	*state = ctx->hbm_stat;
 }
 
 static void panel_hbm_get_wait_state(struct drm_panel *panel, bool *wait)
@@ -1376,7 +1385,7 @@ static struct mtk_panel_params ext_params_120 = {
 		.para_list[1] = 0xdc,
 	},
 	.hbm_en_time = 1,
-	.hbm_dis_time = 3,
+	.hbm_dis_time = 16,
 	.physical_width_um = PHYSICAL_WIDTH,
 	.physical_height_um = PHYSICAL_HEIGHT,
 	.dsc_params = {
@@ -1439,7 +1448,7 @@ static struct mtk_panel_params ext_params_120 = {
 static struct mtk_panel_params ext_params_90 = {
 	// .vfp_low_power = 743
 	.hbm_en_time = 1,
-	.hbm_dis_time = 3,
+	.hbm_dis_time = 16,
 	.cust_esd_check = 1,
 	.esd_check_enable = 1,
 	.lcm_esd_check_table[0] = {
@@ -1512,7 +1521,7 @@ static struct mtk_panel_params ext_params = {
 	// .pll_clk = 373,
 	// .vfp_low_power = 743,
 	.hbm_en_time = 1,
-	.hbm_dis_time = 3,
+	.hbm_dis_time = 16,
 	.cust_esd_check = 1,
 	.esd_check_enable = 1,
 	.lcm_esd_check_table[0] = {
@@ -1781,6 +1790,7 @@ static struct mtk_panel_funcs ext_funcs = {
 	.ata_check = panel_ata_check,
 	.hbm_set_cmdq = panel_hbm_set_cmdq,
 	.hbm_get_state = panel_hbm_get_state,
+	.hbm_get_requested_state = panel_hbm_get_requested_state,
 	.hbm_get_wait_state = panel_hbm_get_wait_state,
 	.hbm_set_wait_state = panel_hbm_set_wait_state,
 	.get_virtual_heigh = lcm_get_virtual_heigh,
