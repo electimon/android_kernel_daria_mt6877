@@ -1056,7 +1056,6 @@ static int lcm_unprepare(struct drm_panel *panel)
 	//prize add by wangfei for ldo 1.8 20210709 end
 
 #endif
-	ctx->hbm_en = false;
 	/*przie update hbm_stat X9LAVA-953 20230329*/
 	ctx->hbm_stat = false;
 	return 0;
@@ -1261,69 +1260,31 @@ static int panel_ata_check(struct drm_panel *panel)
 #endif
 }
 
-extern void prize_common_node_show_register(char* name,bool(*hbm_set)(void));
-bool get_hbmstate(void)
-{
-	printk("%s g_ctx->hbm_stat:%d",__func__, g_ctx->hbm_stat);
-	return g_ctx->hbm_stat;
-}
-
 static int lcm_setbacklight_cmdq(void *dsi, dcs_write_gce cb,
 	void *handle, unsigned int level)
 {
-	 char bl_tb0[] = {0x51,0x07,0xFF};
-	 char hbm_tb[] = {0x51,0x0F,0xFF};
-	 unsigned int level_normal = 125;
-	 unsigned int reg_level = 125;
-	 if(level > 255)
-	 {
-	 	if(level == 260)
-	 	{
-	 		printk("panel into HBM\n");
-			if (!cb)
-				return -1;
-			g_ctx->hbm_stat = true;
-			cb(dsi, handle, hbm_tb, ARRAY_SIZE(hbm_tb));
-	 	}
-	 	else if(level == 270)
-	 	{
-	 		/*PRIZE:Added by lvyuanchuan,X9-534,20230103*/
-			//level_normal = bl_level * BLK_LEVEL_MAP3/255 + BLK_LEVEL_OFFSET;
-			/*PRIZE:modify by durunshen,MT6877-98,20230530*/
-			level_normal = Gamma_to_level[bl_level] + BLK_LEVEL_OFFSET;
-			bl_tb0[1] = (level_normal>>8)&0xf;
-			bl_tb0[2] = (level_normal)&0xff;
-			if (!cb)
-				return -1;
-			printk("panel out HBM bl_level = %d\n",bl_level);
-			g_ctx->hbm_stat = false;
-			cb(dsi, handle, bl_tb0, ARRAY_SIZE(bl_tb0));
-	 	}
-	 }
-	else
-	 {
-	 	/*PRIZE:Added by lvyuanchuan,X9-534,20230103 */
-	 	if(level){
-			reg_level = Gamma_to_level[level] + BLK_LEVEL_OFFSET;
-			bl_level = level; //PRIZE:modify by durunshen,X9-1080,20230301
-		}
-		else
-			reg_level = 0;
-        g_current_level = level;
-		bl_tb0[1] = (reg_level>>8)&0xf;
-		bl_tb0[2] = (reg_level)&0xff;
-		pr_err("level{ %d - %d },bl_tb0[1] = %d,bl_tb0[2] = %d\n",level,reg_level,bl_tb0[1],bl_tb0[2]);
-		if (!cb)
-			return -1;
-		if(g_ctx->hbm_stat == false || level == 0)//modify by zhangchao for X9LAVA-539
-			cb(dsi, handle, bl_tb0, ARRAY_SIZE(bl_tb0));
-		/*PRIZE:Added by lvyuanchuan,X9-678,20221230*/
+	char bl_tb0[] = {0x51,0x07,0xFF};
+	char hbm_tb[] = {0x51,0x0F,0xFF};
+	unsigned int level_normal = 125;
+	unsigned int reg_level = 125;
+
+	if(level > 0){
+		reg_level = Gamma_to_level[level] + BLK_LEVEL_OFFSET;
+		bl_level = level;
 	}
-	 return 0;
+	else
+		reg_level = 0;
+	g_current_level = level;
+	bl_tb0[1] = (reg_level>>8)&0xf;
+	bl_tb0[2] = (reg_level)&0xff;
+	pr_err("level{ %d - %d },bl_tb0[1] = %d,bl_tb0[2] = %d\n",level,reg_level,bl_tb0[1],bl_tb0[2]);
+	if (!cb)
+		return -1;
+	if(g_ctx->hbm_stat == false || level == 0)//modify by zhangchao for X9LAVA-539
+		cb(dsi, handle, bl_tb0, ARRAY_SIZE(bl_tb0));
+	return 0;
 }
 
-
-//prize add by gongtaitao for sensorhub get backlight 20221028 start
 unsigned short led_level_disp_get(char *name)
 {
     int trans_level = 0;
@@ -1332,9 +1293,6 @@ unsigned short led_level_disp_get(char *name)
 	return trans_level;
 }
 EXPORT_SYMBOL(led_level_disp_get);
-//prize add by gongtaitao for sensorhub get backlight 20221028 end
-
-
 
 static int panel_hbm_set_cmdq(struct drm_panel *panel, void *dsi,
 			      dcs_write_gce cb, void *handle, bool en)
@@ -1348,41 +1306,22 @@ static int panel_hbm_set_cmdq(struct drm_panel *panel, void *dsi,
 	if (!cb)
 		return -1;
 
-	//if (ctx->hbm_en == en)
-	//	goto done;
+	if (ctx->hbm_en == en)
+		goto done;
 
 	if (en)
 	{
 		printk("[panel] %s : set HBM\n",__func__);
-	#if 0
-		lcm_dcs_write_seq_static(ctx,0xF0,0x55, 0xAA, 0x52, 0x08, 0x00);   //ELVSS
-		udelay(100);
-		lcm_dcs_write_seq_static(ctx,0xB5,0x80,0x80);
-		lcm_dcs_write_seq_static(ctx,0x6F,0x07);
-		lcm_dcs_write_seq_static(ctx,0xB5,0x1D);
-	#endif
-		/*PRIZE:Added by durunshen,X9-677,20230106 start*/
 		g_ctx->hbm_stat = true;
-		/*PRIZE:Added by durunshen,X9-677,20230106 end*/
 		cb(dsi, handle, hbm_tb, ARRAY_SIZE(hbm_tb));
 	}
 	else
 	{
 		printk("[panel] %s : set normal = %d\n",__func__,bl_level);
-		/*PRIZE:Added by lvyuanchuan,X9-534,20230103*/
 		level_normal = Gamma_to_level[bl_level] + BLK_LEVEL_OFFSET;
 		normal_tb0[1] = (level_normal>>8)&0xff;
 		normal_tb0[2] = (level_normal)&0xff;
-	#if 0
-		lcm_dcs_write_seq_static(ctx,0xF0,0x55, 0xAA, 0x52, 0x08, 0x00);   //ELVSS
-		udelay(100);
-		lcm_dcs_write_seq_static(ctx,0xB5,0x80,0x80);
-		lcm_dcs_write_seq_static(ctx,0x6F,0x07);
-		lcm_dcs_write_seq_static(ctx,0xB5,0x23);
-	#endif
-		/*PRIZE:Added by durunshen,X9-677,20230106 start*/
 		g_ctx->hbm_stat = false;
-		/*PRIZE:Added by durunshen,X9-677,20230106 end*/
 		cb(dsi, handle, normal_tb0, ARRAY_SIZE(normal_tb0));
 	}
 
@@ -1436,8 +1375,8 @@ static struct mtk_panel_params ext_params_120 = {
 		.para_list[0] = 0x9c,
 		.para_list[1] = 0xdc,
 	},
-	.hbm_en_time = 0,
-	.hbm_dis_time = 1,
+	.hbm_en_time = 1,
+	.hbm_dis_time = 3,
 	.physical_width_um = PHYSICAL_WIDTH,
 	.physical_height_um = PHYSICAL_HEIGHT,
 	.dsc_params = {
@@ -1498,7 +1437,9 @@ static struct mtk_panel_params ext_params_120 = {
 };
 
 static struct mtk_panel_params ext_params_90 = {
-	// .vfp_low_power = 743,
+	// .vfp_low_power = 743
+	.hbm_en_time = 1,
+	.hbm_dis_time = 3,
 	.cust_esd_check = 1,
 	.esd_check_enable = 1,
 	.lcm_esd_check_table[0] = {
@@ -1570,6 +1511,8 @@ static struct mtk_panel_params ext_params_90 = {
 static struct mtk_panel_params ext_params = {
 	// .pll_clk = 373,
 	// .vfp_low_power = 743,
+	.hbm_en_time = 1,
+	.hbm_dis_time = 3,
 	.cust_esd_check = 1,
 	.esd_check_enable = 1,
 	.lcm_esd_check_table[0] = {
@@ -2070,20 +2013,9 @@ static int lcm_probe(struct mipi_dsi_device *dsi)
 #endif
 	check_is_need_fake_resolution(dev);
 	pr_err("%s------------%d\n", __func__,__LINE__);
-
-	//add by wangfei
-	// lcm_panel_init(ctx);
 	g_ctx = ctx;
 	ctx->hbm_en = false;
 	g_ctx->hbm_stat = false;
-	prize_common_node_show_register("HBMSTATE", &get_hbmstate);
-
-#if defined(CONFIG_PRIZE_HARDWARE_INFO)
-    strcpy(current_lcm_info.chip,"rm692e5.cmd");
-    strcpy(current_lcm_info.vendor,"Raydium");
-    sprintf(current_lcm_info.id,"0x%02x",0x81);
-    strcpy(current_lcm_info.more,"1080*2400");
-#endif
 	return ret;
 }
 
