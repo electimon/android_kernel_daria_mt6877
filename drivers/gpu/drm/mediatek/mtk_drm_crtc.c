@@ -982,6 +982,7 @@ int mtk_drm_crtc_set_panel_hbm(struct drm_crtc *crtc, bool en)
 	struct cmdq_pkt *cmdq_handle;
 	bool is_frame_mode;
 	bool state = false;
+	// bool requested_state = false;
 
 	if (!(comp && comp->funcs && comp->funcs->io_cmd))
 		return -EINVAL;
@@ -989,6 +990,10 @@ int mtk_drm_crtc_set_panel_hbm(struct drm_crtc *crtc, bool en)
 	comp->funcs->io_cmd(comp, NULL, DSI_HBM_GET_STATE, &state);
 	if (state == en)
 		return 0;
+	
+	// comp->funcs->io_cmd(comp, NULL, DSI_HBM_GET_REQUESTED_STATE, &requested_state);
+	// if (requested_state != en)
+	// 	en = requested_state;
 
 	if (!(mtk_crtc->enabled)) {
 		DDPINFO("%s: skip, slept\n", __func__);
