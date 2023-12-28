@@ -6574,17 +6574,6 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 		panel_ext->funcs->hbm_get_state(dsi->panel, (bool *)params);
 		break;
 	}
-	case DSI_HBM_GET_REQUESTED_STATE:
-	{
-		panel_ext = mtk_dsi_get_panel_ext(comp);
-		if (!(panel_ext && panel_ext->funcs &&
-		      panel_ext->funcs->hbm_get_requested_state))
-			break;
-
-		panel_ext->funcs->hbm_get_requested_state(dsi->panel,
-							  (bool *)params);
-		break;
-	}
 	case DSI_HBM_GET_WAIT_STATE:
 	{
 		panel_ext = mtk_dsi_get_panel_ext(comp);
