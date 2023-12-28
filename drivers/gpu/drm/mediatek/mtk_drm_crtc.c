@@ -1014,6 +1014,10 @@ int mtk_drm_crtc_set_panel_hbm(struct drm_crtc *crtc, bool en)
 				mtk_crtc->gce_obj.event[EVENT_STREAM_DIRTY]);
 	}
 
+	if (mtk_crtc->panel_ext && mtk_crtc->panel_ext->params) {
+		mtk_drm_crtc_before_hbm_wait(crtc, en);
+	}
+
 	comp->funcs->io_cmd(comp, cmdq_handle, DSI_HBM_SET, &en);
 
 	if (is_frame_mode) {
@@ -1025,6 +1029,41 @@ int mtk_drm_crtc_set_panel_hbm(struct drm_crtc *crtc, bool en)
 
 	cmdq_pkt_flush(cmdq_handle);
 	cmdq_pkt_destroy(cmdq_handle);
+
+	return 0;
+}
+
+int mtk_drm_crtc_before_hbm_wait(struct drm_crtc *crtc, bool en)
+{
+	struct mtk_panel_params *panel_ext = mtk_drm_get_lcm_ext_params(crtc);
+	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
+	struct mtk_ddp_comp *comp = mtk_ddp_comp_request_output(mtk_crtc);
+	bool wait = false;
+	unsigned int wait_count = 0;
+
+	if (!(comp && comp->funcs && comp->funcs->io_cmd))
+		return -EINVAL;
+
+	comp->funcs->io_cmd(comp, NULL, DSI_HBM_GET_WAIT_STATE, &wait);
+	if (wait != true)
+		return 0;
+
+	if (!panel_ext)
+		return -EINVAL;
+
+	wait_count = en ? panel_ext->before_hbm_en_time : panel_ext->before_hbm_dis_time;
+
+	DDPINFO("LCM hbm %s wait %u-TE\n", en ? "enable" : "disable",
+		wait_count);
+
+	while (wait_count) {
+		mtk_drm_idlemgr_kick(__func__, crtc, 0);
+		wait_count--;
+		comp->funcs->io_cmd(comp, NULL, DSI_HBM_WAIT, NULL);
+	}
+
+	wait = false;
+	comp->funcs->io_cmd(comp, NULL, DSI_HBM_SET_WAIT_STATE, &wait);
 
 	return 0;
 }

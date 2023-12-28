@@ -258,6 +258,8 @@ struct mtk_panel_params {
 	unsigned int lcm_cmd_if;
 	unsigned int hbm_en_time;
 	unsigned int hbm_dis_time;
+	unsigned int before_hbm_en_time;
+	unsigned int before_hbm_dis_time;
 	unsigned int lcm_index;
 	unsigned int wait_sof_before_dec_vfp;
 	unsigned int doze_delay;
