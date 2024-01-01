@@ -291,6 +291,30 @@
 #define DSI_GERNERIC_LONG_PACKET_ID 0x29
 #define DSI_GERNERIC_READ_LONG_PACKET_ID 0x14
 
+#ifdef CONFIG_MTK_LEDS
+#include <mtk_leds_drv.h>
+#ifdef CONFIG_LEDS_MTK_DISP
+#ifdef CONFIG_MTK_AAL_SUPPORT
+#define CONFIG_LEDS_BRIGHTNESS_CHANGED
+#endif
+#include <leds-mtk-disp.h>
+#elif defined CONFIG_LEDS_MTK_PWM
+#ifdef CONFIG_MTK_AAL_SUPPORT
+#define CONFIG_LEDS_BRIGHTNESS_CHANGED
+#endif
+#include <leds-mtk-pwm.h>
+#elif defined CONFIG_LEDS_MTK_I2C
+#ifdef CONFIG_MTK_AAL_SUPPORT
+#define CONFIG_LEDS_BRIGHTNESS_CHANGED
+#endif
+#include <leds-mtk-i2c.h>
+#endif
+#else
+#define mt_leds_brightness_set(x, y) do { } while (0)
+#define MT65XX_LED_MODE_NONE (0)
+#define MT65XX_LED_MODE_CUST_LCM (4)
+#endif
+
 struct phy;
 unsigned int bdg_rxtx_ratio = 229;
 unsigned int line_back_to_LP = 1;
@@ -6803,14 +6827,22 @@ static ssize_t hbm_store(struct device *dev, struct device_attribute *attr,
 {
 	struct mtk_dsi *dsi = dev_get_drvdata(dev);
 	struct drm_crtc *crtc = dsi->encoder.crtc;
-	bool hbm = false;
+	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
+	bool hbm_en = false;
 	int ret = 0;
+	int bl;
 
-	ret = kstrtobool(buf, &hbm);
+	ret = kstrtobool(buf, &hbm_en);
 	if (ret)
 		return ret;
 
-	ret = mtk_drm_crtc_set_panel_hbm(crtc, hbm);
+	mtk_crtc->hbm_requested = hbm_en;
+	bl = hbm_en ? 2048 : DIV_ROUND_UP(((mtk_crtc->hbm_old_bl*255)+1023),2047);
+	ret = mt_leds_brightness_set("lcd-backlight", bl);
+	if (ret)
+		return ret;
+
+	ret = mtk_drm_crtc_set_panel_hbm(crtc, hbm_en);
 	if (ret)
 		return ret;
 
